@@ -20,8 +20,8 @@ module qqspi #(
 	input clk,
 	input resetn,
 
-   output reg ss,
-   output reg sclk,
+	output reg ss,
+	output reg sclk,
 	inout mosi,
 	inout miso,
 	inout sio2,
