@@ -5,189 +5,229 @@
  * Verilog module for interfacing the LD-QQSPI-PSRAM32 Pmod(tm) compatible
  * module with ICE40 FPGAs.
  *
+ * added byte, halfword, word write operation hirosh dabui <hirosh@dabui.de>
  */
-
+`timescale 1 ns/100 ps
+`default_nettype none
 module qqspi #(
-	parameter [0:0] QUAD_MODE = 1
-)(
+           parameter [0:0] QUAD_MODE = 1
+       )(
 
-	input [31:0] addr,
-	output reg [31:0] rdata,
-	input [31:0] wdata,
-	output reg ready,
-	input valid,
-	input write,
-	input clk,
-	input resetn,
+           input [24:0] addr,
+           output reg [31:0] rdata,
+           input [31:0] wdata,
+           input [ 3:0] wstrb,
+           output reg ready,
+           input valid,
+           input clk,
+           input resetn,
 
-	output reg ss,
-	output reg sclk,
-	inout mosi,
-	inout miso,
-	inout sio2,
-	inout sio3,
-	output reg [1:0] cs,
-	output reg [2:0] state
+           output reg ss,
+           output reg sclk,
+           inout mosi,
+           inout miso,
+           inout sio2,
+           inout sio3,
+           output reg [1:0] cs,
+           output reg [2:0] state
 
-);
+       );
 
-	reg [3:0] sio_oe;
-	reg [3:0] sio_do;
-	wire [3:0] sio_di;
+reg  [3:0] sio_oe;
+reg  [3:0] sio_do;
+wire [3:0] sio_di;
 
-`ifdef TESTBENCH
 
-	assign mosi = sio_oe[0] ? sio_do[0] : 1'bz;
-	assign miso = sio_oe[1] ? sio_do[1] : 1'bz;
-	assign sio2 = sio_oe[2] ? sio_do[2] : 1'bz;
-	assign sio3 = sio_oe[3] ? sio_do[3] : 1'bz;
+assign mosi = sio_oe[0] ? sio_do[0] : 1'bz;
+assign miso = sio_oe[1] ? sio_do[1] : 1'bz;
+assign sio2 = sio_oe[2] ? sio_do[2] : 1'bz;
+assign sio3 = sio_oe[3] ? sio_do[3] : 1'bz;
 
-	assign sio_di = {sio3, sio2, miso, mosi};
+assign sio_di = {sio3, sio2, miso, mosi};
+wire write = |wstrb;
 
-`else
+reg [1:0] offset;
+reg [5:0] xfer_wr_cycles;
+reg [31:0] write_buffer;
+always @(*) begin
+  write_buffer = 'h x;
+  case (wstrb)
+    4'b 0001: begin
+      offset = 3;
+      write_buffer[31:24] = wdata[7:0];
+      xfer_wr_cycles = 8;
+    end
+    4'b 0010: begin
+      offset = 2;
+      write_buffer[31:24] = wdata[15:8];
+      xfer_wr_cycles = 8;
+    end
+    4'b 0100: begin
+      offset = 1;
+      write_buffer[31:24] = wdata[23:16];
+      xfer_wr_cycles = 8;
+    end
+    4'b 1000: begin
+      offset = 0;
+      write_buffer[31:24] = wdata[31:24];
+      xfer_wr_cycles = 8;
+    end
+    4'b 0011: begin
+      offset = 2;
+      write_buffer[31:16] = wdata[15:0];
+      xfer_wr_cycles = 16;
+    end
+    4'b 1100: begin
+      offset = 0;
+      write_buffer[31:16] = wdata[31:16];
+      xfer_wr_cycles = 16;
+    end
+    4'b 1111: begin
+      offset = 0;
+      write_buffer = wdata;
+      xfer_wr_cycles = 32;
+    end
+    default:
+    begin
+      offset = 0;
+      write_buffer = wdata;
+      xfer_wr_cycles = 32;
+    end
+  endcase
+end
 
-	SB_IO #(
-		.PIN_TYPE(6'b1010_01),
-		.PULLUP(1'b0)
-	) qqspi_io [3:0] (
-		.PACKAGE_PIN({sio3, sio2, miso, mosi}),
-		.OUTPUT_ENABLE(sio_oe),
-		.D_OUT_0(sio_do),
-		.D_IN_0(sio_di)
-	);
+localparam [2:0]
+           STATE_IDLE			= 3'd0,
+           STATE_INIT			= 3'd1,
+           STATE_START	  = 3'd2,
+           STATE_CMD			= 3'd3,
+           STATE_ADDR			= 3'd4,
+           STATE_WAIT			= 3'd5,
+           STATE_XFER			= 3'd6,
+           STATE_END			= 3'd7;
 
-`endif
+reg [31:0] buffer;
+reg [5:0] xfer_bits;
+reg xfer_quad;
 
-	localparam [2:0]
-		STATE_IDLE			= 4'd0,
-		STATE_INIT			= 4'd1,
-		STATE_START			= 4'd2,
-		STATE_CMD			= 4'd3,
-		STATE_ADDR			= 4'd4,
-		STATE_WAIT			= 4'd5,
-		STATE_XFER			= 4'd6,
-		STATE_END			= 4'd7;
+always @(posedge clk) begin
 
-	reg [31:0] buffer;
-	reg [5:0] xfer_bits;
-	reg xfer_quad;
+    if (!resetn) begin
 
-	always @(posedge clk) begin
+        cs <= 2'b00;
+        ss <= 1;
+        sclk <= 0;
+        sio_oe <= 4'b1111;
+        sio_do <= 4'b0000;
 
-		if (!resetn) begin
+        buffer    <= 0;
+        xfer_quad <= 0;
+        xfer_bits <= 0;
+        ready <= 0;
 
-			cs <= 2'b00;
-			ss <= 1;
-			sclk <= 0;
-			sio_oe = 4'b1111;
-			sio_do = 4'b0000;
+        state <= STATE_IDLE;
 
-			xfer_quad <= 0;
-			xfer_bits <= 0;
-			ready <= 0;
+    end else if (valid && !ready && state == STATE_IDLE) begin
 
-			state <= STATE_IDLE;
+        state <= STATE_INIT;
+        xfer_bits <= 0;
 
-		end else if (valid && !ready && state == STATE_IDLE) begin
+    end else if (!valid && ready) begin
 
-			state <= STATE_INIT;
-			xfer_bits <= 0;
+        ready <= 0;
 
-		end else if (!valid && ready) begin
+    end else if (|xfer_bits) begin
 
-			ready <= 0;
+        if (xfer_quad) begin
+            sio_do[3:0] <= buffer[31:28];
+        end else begin
+            sio_do[0]   <= buffer[31];
+        end
 
-		end else if (xfer_bits) begin
+        if (sclk) begin
+            sclk <= 0;
+        end else begin
+            sclk <= 1;
+            if (xfer_quad) begin
+                buffer <= {buffer[27:0], sio_di[3:0]};
+                xfer_bits <= xfer_bits - 4;
+            end else begin
+                buffer <= {buffer[30:0], sio_di[1]};
+                xfer_bits <= xfer_bits - 1;
+            end
+        end
 
-			if (xfer_quad) begin
-				sio_do[3:0] <= buffer[31:28];
-			end else begin
-				sio_do[0] <= buffer[31];
-			end
+    end else case (state)
 
-			if (sclk) begin
-				sclk <= 0;
-			end else begin
-				sclk <= 1;
-				if (xfer_quad) begin
-					buffer <= {buffer, sio_di[3:0]};
-					xfer_bits <= xfer_bits - 4;
-				end else begin
-					buffer <= {buffer, sio_di[1]};
-					xfer_bits <= xfer_bits - 1;
-				end
-			end
+        STATE_IDLE: begin
+            ss <= 1;
+        end
 
-		end else case (state)
+        STATE_INIT: begin
+            sio_oe <= 4'b0001;
+            cs[1:0] <= addr[22:21];
+            state <= STATE_START;
+        end
 
-			STATE_IDLE: begin
-				ss <= 1;
-			end
+        STATE_START: begin
+            ss <= 0;
+            state <= STATE_CMD;
+        end
 
-			STATE_INIT: begin
-				sio_oe <= 4'b0001;
-				cs[1:0] <= addr[24:23];
-				state <= STATE_START;
-			end
+        STATE_CMD: begin
+            if (QUAD_MODE)
+                    if (write) buffer[31:24] <= 8'h38; else buffer[31:24] <= 8'heb;
+            else
+                    if (write) buffer[31:24] <= 8'h02; else buffer[31:24] <= 8'h03;
+            xfer_bits <= 8;
+            xfer_quad <= 0;
+            state <= STATE_ADDR;
+        end
 
-			STATE_START: begin
-				ss <= 0;
-				state <= STATE_CMD;
-			end
+        STATE_ADDR: begin
+            buffer[31:8] <= { 1'b0, {addr[20:0], write ? offset : 2'b 00} };
 
-			STATE_CMD: begin
-				if (QUAD_MODE)
-					if (write) buffer[31:24] <= 8'h38; else buffer[31:24] <= 8'heb;
-				else
-					if (write) buffer[31:24] <= 8'h02; else buffer[31:24] <= 8'h03;
-				xfer_bits <= 8;
-				xfer_quad <= 0;
-				state <= STATE_ADDR;
-			end
+            sio_oe <= 4'b1111;
+            xfer_bits <= 24;
+            if (QUAD_MODE)
+                xfer_quad <= 1;
+            if (QUAD_MODE && !write)
+                state <= STATE_WAIT;
+            else
+                state <= STATE_XFER;
+        end
 
-			STATE_ADDR: begin
-				buffer[31:8] <= { 1'b0, addr[22:0] };
-				sio_oe <= 4'b1111;
-				xfer_bits <= 24;
-				if (QUAD_MODE)
-					xfer_quad <= 1;
-				if (QUAD_MODE && !write)
-					state <= STATE_WAIT;
-				else
-					state <= STATE_XFER;
-			end
+        STATE_WAIT: begin
+            sio_oe <= 4'b0000;
+            xfer_bits <= 6;
+            xfer_quad <= 0;
+            state <= STATE_XFER;
+        end
 
-			STATE_WAIT: begin
-				sio_oe <= 4'b0000;
-				xfer_bits <= 6;
-				xfer_quad <= 0;
-				state <= STATE_XFER;
-			end
+        STATE_XFER: begin
+            if (QUAD_MODE)
+                xfer_quad <= 1;
+            if (write) begin
+                sio_oe <= 4'b1111;
+                buffer <= write_buffer;
+            end else begin
+                sio_oe <= 4'b0000;
+            end
+            xfer_bits <= write ? xfer_wr_cycles : 32;
+            state <= STATE_END;
+        end
 
-			STATE_XFER: begin
-				if (QUAD_MODE)
-					xfer_quad <= 1;
-				if (write) begin
-					sio_oe <= 4'b1111;
-					buffer <= wdata;
-				end else begin
-					sio_oe <= 4'b0000;
-				end
-				xfer_bits <= 32;
-				state <= STATE_END;
-			end
+        STATE_END: begin
+            if (write)
+                ss <= 1;
+            else
+                rdata <= buffer;
+            ready <= 1;
+            state <= STATE_IDLE;
+        end
 
-			STATE_END: begin
-				if (write)
-					ss <= 1;
-				else
-					rdata <= buffer;
-				ready <= 1;
-				state <= STATE_IDLE;
-			end
+    endcase
 
-		endcase
-
-	end
+end
 
 endmodule
