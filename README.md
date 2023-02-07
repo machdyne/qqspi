@@ -10,7 +10,7 @@ Find more information on the [LD-QQSPI-PSRAM32 product page](https://machdyne.co
 
 ## Modes
 
-| PMO /SS | PMODCS0 | PMODCS1 | -> | QSPI1/CE | QSPI2/CE | QSPI3/CE | QSPI4/CE |
+| PMOD /SS | PMODCS0 | PMODCS1 | -> | QSPI1/CE | QSPI2/CE | QSPI3/CE | QSPI4/CE |
 | ------- | ------- | ------- | -- | -------- | -------- | -------- | -------- |
 | H | X | X | -> | H | H | H | H |
 | L | L | L | -> | L | H | H | H |
@@ -22,7 +22,7 @@ Find more information on the [LD-QQSPI-PSRAM32 product page](https://machdyne.co
 
 | Pin | Signal |
 | --- | ------ |
-| 1 | SS (active low) |
+| 1 | \SS (active low) |
 | 2 | SIO0 (MOSI) |
 | 3 | SIO1 (MISO) |
 | 4 | SCK |
