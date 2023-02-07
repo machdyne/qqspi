@@ -22,7 +22,7 @@ Find more information on the [LD-QQSPI-PSRAM32 product page](https://machdyne.co
 
 | Pin | Signal |
 | --- | ------ |
-| 1 | \SS (active low) |
+| 1 | /SS (active low) |
 | 2 | SIO0 (MOSI) |
 | 3 | SIO1 (MISO) |
 | 4 | SCK |
