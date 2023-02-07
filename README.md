@@ -10,7 +10,7 @@ Find more information on the [LD-QQSPI-PSRAM32 product page](https://machdyne.co
 
 ## Modes
 
-| PMOD /SS | PMODCS0 | PMODCS1 | -> | QSPI1/CE | QSPI2/CE | QSPI3/CE | QSPI4/CE |
+| PMOD/SS | PMODCS0 | PMODCS1 | -> | QSPI1/CE | QSPI2/CE | QSPI3/CE | QSPI4/CE |
 | ------- | ------- | ------- | -- | -------- | -------- | -------- | -------- |
 | H | X | X | -> | H | H | H | H |
 | L | L | L | -> | L | H | H | H |
