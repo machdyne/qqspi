@@ -34,3 +34,14 @@ Find more information on the [LD-QQSPI-PSRAM32 product page](https://machdyne.co
 | 10 | CS1 |
 | 11 | GND |
 | 12 | 3V3 |
+
+## License
+
+The contents of this repo are released under the [Lone Dynamics Open License](LICENSE.md) with the following exceptions:
+
+- The KiCad design files contain parts of the [kicad-pmod](https://github.com/mithro/kicad-pmod) library which is released under the [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0.html).
+
+- The KiCad design files may contain symbols and footprints released under other licenses; please contact us if we've failed to give proper attribution.
+
+Note: You can use these designs for commercial purposes but we ask that instead of producing exact clones, that you either replace our trademarks and logos with your own or add your own next to ours.
+
